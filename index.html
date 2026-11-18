@@ -39,6 +39,8 @@ button:disabled{opacity:.35}
 #lg b{color:#eee}.sb{color:#7bd88f}.se{color:#e6c35c}
 #acts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 #acts button{font-size:13.5px;white-space:nowrap}
+#acts2{display:grid;grid-template-columns:1fr 1fr 1fr 1.5fr .8fr;gap:6px;margin-top:6px}
+#acts2 button{font-size:13px;white-space:nowrap;padding:0 2px}
 #sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:9}
 #sheet.open{display:flex}
 #sheetBox{width:100%;max-width:560px;margin:0 auto;background:#1c1c1c;border-radius:16px 16px 0 0;padding:14px 14px calc(16px + env(safe-area-inset-bottom));max-height:82vh;overflow:auto}
@@ -62,7 +64,9 @@ button:disabled{opacity:.35}
 </div>
 <div id="acts">
  <button id="why" disabled>이유 보기</button><button id="rec">엔진 추천</button><button id="cand">후보 순위</button><button id="deep">깊이 분석</button>
- <button id="undo">되돌리기</button><button id="reset">처음으로</button><button id="go" class="on" disabled>상대 수 두기</button><button id="optsBtn">설정</button>
+</div>
+<div id="acts2">
+ <button id="undo">되돌리기</button><button id="redo" disabled>앞으로</button><button id="reset">처음으로</button><button id="go" class="on" disabled>상대 수 두기</button><button id="optsBtn">설정</button>
 </div>
 </div>
 <div id="sheet"><div id="sheetBox">
@@ -104,6 +108,8 @@ for(const name in BOOK){
 }
 // ---- state
 let op='포월',side='백',style='book',grade=true,hintOn=false;
+let redoS=[];
+function updRedo(){$('redo').disabled=!redoS.length;}
 let moves=[],log=[],busy=false,over=null,fb=null,ghost=null,gen=0,ready=false,engineFail=false,wasOut=false;
 let worker=null,cands=null;
 const userTurn=()=>side==='둘다'||(moves.length%2===0)===(side==='흑');
@@ -285,7 +291,7 @@ function fbHtml(){
 function setFb(o){fb=o;$('why').disabled=!fb;}
 // ---- play
 function place(m,tag){
-  moves.push(m);log[moves.length-1]=tag||null;
+  moves.push(m);log[moves.length-1]=tag||null;redoS.length=0;updRedo();
   const w=five(moves);draw();renderLog();
   if(w){over=w;status((fbHtml()?fbHtml()+'<br>':'')+'<span class="big '+(side==='둘다'||w===side?'win':'lose')+'">'+w+' 승 (오목 완성)</span>');return true;}
   return false;
@@ -573,29 +579,57 @@ $('cand').onclick=async()=>{
 };
 // ---- ui
 const opsEl=$('ops');
-for(const n in OPEN){const b=document.createElement('button');b.textContent=n;b.dataset.n=n;b.onclick=()=>{op=n;sel();reset();};opsEl.appendChild(b);}
+for(const n in OPEN){const b=document.createElement('button');b.textContent=n;b.dataset.n=n;b.onclick=()=>{op=n;sel();saveSet();reset();};opsEl.appendChild(b);}
 function sel(){[...opsEl.children].forEach(b=>b.classList.toggle('on',b.dataset.n===op));}
 function setSide(s){
-  const changed=s!==side;side=s;$('sB').classList.toggle('on',s==='흑');$('sW').classList.toggle('on',s==='백');$('sA').classList.toggle('on',s==='둘다');
+  const changed=s!==side;side=s;saveSet();if(changed)redoS.length=0,updRedo();
+  $('sB').classList.toggle('on',s==='흑');$('sW').classList.toggle('on',s==='백');$('sA').classList.toggle('on',s==='둘다');
   if(!changed)return;
   if(moves.length<=3){reset();return;}
   gen++;clearGhost();setFb(null);oppHtml='';busy=false;if(!over)turn(null,true);
 }
 $('sA').onclick=()=>setSide('둘다');$('sB').onclick=()=>setSide('흑');$('sW').onclick=()=>setSide('백');
-function reset(){gen++;clearGhost(true);moves=OPEN[op].slice();log=[];busy=false;over=null;wasOut=false;oppHtml='';setFb(null);draw();renderLog();turn(null,true);}
+function reset(){gen++;clearGhost(true);redoS.length=0;updRedo();moves=OPEN[op].slice();log=[];busy=false;over=null;wasOut=false;oppHtml='';setFb(null);draw();renderLog();turn(null,true);}
 $('undo').onclick=()=>{
+  const prev=moves.slice(),prevLog=log.slice();
   gen++;clearGhost(true);busy=false;over=null;
   if(moves.length>3)moves.pop();
   while(!userTurn()&&moves.length>3)moves.pop();
-  log.length=moves.length;oppHtml='';setFb(null);wasOut=false;draw();renderLog();turn(null,true);
+  if(moves.length<prev.length)redoS.push({m:prev.slice(moves.length),l:prevLog.slice(moves.length,prev.length)});
+  log.length=moves.length;oppHtml='';setFb(null);wasOut=false;updRedo();draw();renderLog();turn(null,true);
+};
+$('redo').onclick=()=>{
+  if(!redoS.length||(busy&&!userTurn()))return;
+  const g=redoS.pop();
+  gen++;clearGhost(true);busy=false;over=null;
+  g.m.forEach((m,i)=>{moves.push(m);log[moves.length-1]=g.l[i]||null;});
+  oppHtml='';setFb(null);wasOut=false;updRedo();
+  const w=five(moves);draw();renderLog();
+  if(w){over=w;status('<span class="big '+(side==='둘다'||w===side?'win':'lose')+'">'+w+' 승 (오목 완성)</span>');return;}
+  turn(null,true);
 };
 $('reset').onclick=reset;
 $('go').onclick=()=>{if(busy||over||userTurn())return;turn();};
-$('hint').onclick=()=>{hintOn=!hintOn;$('hint').classList.toggle('on',hintOn);draw();};
-$('gr').onclick=()=>{grade=!grade;$('gr').classList.toggle('on',grade);$('gr').textContent=grade?'채점 켜짐':'채점 꺼짐';};
-$('style').onchange=()=>{style=$('style').value;};
+$('hint').onclick=()=>{hintOn=!hintOn;$('hint').classList.toggle('on',hintOn);saveSet();draw();};
+$('gr').onclick=()=>{grade=!grade;$('gr').classList.toggle('on',grade);$('gr').textContent=grade?'채점 켜짐':'채점 꺼짐';saveSet();};
+$('style').onchange=()=>{style=$('style').value;saveSet();};
+$('tl').onchange=saveSet;
 cv.addEventListener('pointerup',onTap);
 addEventListener('resize',draw);
+const LSK='omok.v1';
+function saveSet(){try{localStorage.setItem(LSK,JSON.stringify({side:side,op:op,style:style,grade:grade,hintOn:hintOn,tl:$('tl').value}));}catch(e){}}
+function loadSet(){try{
+  const d=JSON.parse(localStorage.getItem(LSK)||'null');if(!d)return;
+  if(OPEN[d.op])op=d.op;
+  if(['흑','백','둘다'].includes(d.side))side=d.side;
+  if(['book','engine','random'].includes(d.style)){style=d.style;$('style').value=style;}
+  grade=d.grade!==false;hintOn=!!d.hintOn;
+  if(['3000','5000','8000','15000'].includes(String(d.tl)))$('tl').value=String(d.tl);
+}catch(e){}
+  $('gr').classList.toggle('on',grade);$('gr').textContent=grade?'채점 켜짐':'채점 꺼짐';$('hint').classList.toggle('on',hintOn);
+  setSide(side);
+}
+loadSet();
 sel();startEngine();reset();
 
 $('tabSt').onclick=()=>setTab('st');
