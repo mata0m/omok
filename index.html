@@ -39,6 +39,7 @@ button:disabled{opacity:.4}
  <button id="why" disabled>이유 보기</button>
  <button id="rec">엔진 추천</button>
  <button id="cand">후보 순위</button>
+ <button id="deep">깊이 분석</button>
  <button id="go" class="on" style="display:none">상대 수 두기</button>
  <button id="undo">되돌리기</button>
  <button id="reset">처음으로</button>
@@ -381,7 +382,10 @@ function gradeMove(c,inBook,bookList,m,R,PRE,before){
   }
   const loss=pr.cp-af.cp;
   if(loss<=60){
-    if(c===0&&af.cp>150)return {cls:'adv',label:'강하지만 무적수 자리는 아님',reason:cx+'엔진 평가는 흑 유리지만 끝까지 이기는 수순은 증명되지 않았고, 책 수도 아닙니다.'};
+    if(c===0&&af.cp>150){
+      if(!bookList.length)return {cls:'best',label:'엔진 최선 수 · 책 밖 국면',reason:cx+'백이 책에서 벗어난 국면이라 책에는 답이 없습니다. 이 수는 엔진 1순위와 같고 흑이 유리합니다. 다만 끝까지 이기는 수순은 이 시간 안에 증명되지 않았습니다. 「깊이 분석」으로 더 확인할 수 있습니다.'};
+      return {cls:'adv',label:'강하지만 무적수 자리는 아님',reason:cx+'엔진 평가는 흑 유리지만 증명된 필승은 아니고, 책 수도 아닙니다. 책 후보: '+bookList.join(', ')+'.'};
+    }
     return {cls:'best',label:c===0?'최선에 가까운 수':'최선 수',reason:cx+'엔진 최선과 평가가 거의 같습니다.'};
   }
   if(loss<=250)return {cls:c===0?'mid':'ok',label:c===0?'보통':'일반 수',reason:cx+'엔진 최선은 '+bTxt+'입니다 (평가 차 약 '+loss+').',best:bt};
@@ -492,6 +496,18 @@ $('rec').onclick=async()=>{
   const g=gen;$('rec').disabled=true;
   try{const R=await analyze(moves.slice(),parseInt($('tl').value));if(g===gen)ghostFor(moves.length,R,'엔진 추천 '+R.best+' ·');}catch(e){}
   $('rec').disabled=false;
+};
+$('deep').onclick=async()=>{
+  if(ghost){clearGhost();return;}
+  if(busy||over||!userTurn())return;
+  if(!ready){status('<span class="lose">엔진을 불러오는 중이거나 실행하지 못했습니다.</span>');return;}
+  const g=gen,stmB=moves.length%2===0;$('deep').disabled=true;
+  status('<span class="mut">깊이 분석 중… (약 40초, 이 국면을 끝까지 파고듭니다)</span>');
+  try{const R=await analyze(moves.slice(),40000);if(g!==gen){$('deep').disabled=false;return;}
+    status('<b>깊이 분석 결과</b><br>'+posEval(R.ev,stmB)+' · 최선 <b>'+R.best+'</b> (깊이 '+R.depth+')<br><span class="mut">필승 증명이 안 나오면 이 시간 안에 못 찾은 것이지 지는 수라는 뜻은 아닙니다.</span>');
+    ghostFor(moves.length,R,'깊이 분석 '+R.best+' ·');
+  }catch(e){}
+  $('deep').disabled=false;
 };
 // ---- candidate ranking (multi-PV): book + off-book moves
 function candText(ev,stmBlack){
