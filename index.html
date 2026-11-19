@@ -25,10 +25,11 @@ button:disabled{opacity:.35}
 #ghC{position:absolute;bottom:6px;left:6px;right:6px;display:grid;grid-template-columns:1fr 1fr 1.3fr 2fr 44px;gap:6px}
 #gh.act #ghC button{pointer-events:auto}
 #gh button{min-height:40px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(30,30,30,.88)}
-#st,#cd{height:clamp(112px,17vh,140px);overflow-y:auto;-webkit-overflow-scrolling:touch;font-size:15px;line-height:1.55;overscroll-behavior:contain}
+#st,#cd{height:clamp(92px,13vh,118px);overflow-y:auto;-webkit-overflow-scrolling:touch;font-size:15px;line-height:1.55;overscroll-behavior:contain}
 #cd{display:none;font-size:13px;line-height:1.5}
+#cd:empty::before{content:'후보 탭을 누르면 엔진이 보는 상위 6개 수를 평가와 함께 보여 줍니다.';color:#999;font-size:13px}
 #panel.tabcd #st{display:none}#panel.tabcd #cd{display:block}
-#cd .r{display:flex;gap:8px;align-items:center;padding:8px 10px;margin:0 0 4px;background:#181818;border-radius:8px;border:1px solid #333}
+#cd .r{display:flex;gap:8px;align-items:center;padding:6px 10px;margin:0 0 4px;background:#181818;border-radius:8px;border:1px solid #333}
 #cd .r b{min-width:34px}
 #cd .r .e{flex:1;color:#ccc}
 #cd .r.bk{border-color:#5a9a5a}
@@ -37,9 +38,10 @@ button:disabled{opacity:.35}
 #lg{flex:1;min-width:0;font-size:12px;color:#aaa;white-space:nowrap;overflow-x:auto;scrollbar-width:none;line-height:26px;text-align:right}
 #lg::-webkit-scrollbar{display:none}
 #lg b{color:#eee}.sb{color:#7bd88f}.se{color:#e6c35c}
-#acts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#acts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+#cand{display:none}
 #acts button{font-size:13.5px;white-space:nowrap}
-#acts2{display:grid;grid-template-columns:1fr 1fr 1fr 1.5fr .8fr;gap:6px;margin-top:6px}
+#acts2{display:grid;grid-template-columns:.85fr 1fr 1.45fr 1.15fr 1.15fr;gap:6px;margin:6px 0 8px}
 #acts2 button{font-size:13px;white-space:nowrap;padding:0 2px}
 #sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:9}
 #sheet.open{display:flex}
@@ -57,16 +59,16 @@ button:disabled{opacity:.35}
 <div id="bw"><canvas id="cv"></canvas>
  <div id="gh"><div id="ghT"></div><div id="ghC"><button id="ghP">◀</button><button id="ghN">▶</button><button id="ghA">끝까지</button><button id="ghB" style="visibility:hidden"></button><button id="ghX">✕</button></div></div>
 </div>
+<div id="acts">
+ <button id="why" disabled>이유 보기</button><button id="rec">엔진 추천</button><button id="deep">깊이 분석</button><button id="cand">후보 순위</button>
+</div>
+<div id="acts2">
+ <button id="optsBtn">설정</button><button id="reset">처음으로</button><button id="go" class="on" disabled>상대 수 두기</button><button id="undo">되돌리기</button><button id="redo" disabled>앞으로</button>
+</div>
 <div id="panel">
  <div id="tabs"><button id="tabSt" class="on">판정</button><button id="tabCd">후보</button><div id="lg"></div></div>
  <div id="st">준비 중…</div>
  <div id="cd"></div>
-</div>
-<div id="acts">
- <button id="why" disabled>이유 보기</button><button id="rec">엔진 추천</button><button id="cand">후보 순위</button><button id="deep">깊이 분석</button>
-</div>
-<div id="acts2">
- <button id="undo">되돌리기</button><button id="redo" disabled>앞으로</button><button id="reset">처음으로</button><button id="go" class="on" disabled>상대 수 두기</button><button id="optsBtn">설정</button>
 </div>
 </div>
 <div id="sheet"><div id="sheetBox">
@@ -553,7 +555,7 @@ function renderCands(){
   if(!cands){$('cd').innerHTML='';setTab('st');return;}
   setTab('cd');
   const stmB=cands.base%2===0;const who=stmB?'흑':'백';
-  let h='<div class="mut" style="margin:2px 0">'+who+' 차례 엔진 후보 순위 · 눌러서 진행 보기 · 초록 테두리 = 책에 있는 수 · "흑 +숫자"는 흑 우세 정도(백 차례면 작을수록 잘 버팀), "필승"은 엔진이 끝까지 증명한 것</div>';
+  let h='<div class="mut" style="margin:0 0 4px">'+who+' 차례 · 눌러서 진행 보기 · 초록 테두리 = 책 수</div>';
   cands.list.forEach((c,i)=>{h+='<div class="r'+(c.book?' bk':'')+'" data-i="'+i+'"><b>'+(i+1)+'. '+c.move+'</b><span class="e">'+candText(c.ev,stmB)+(c.book?' · <span class="win">책</span>':' · <span class="adv">책 밖</span>')+'</span><span class="mut">깊이 '+c.depth+'</span></div>';});
   $('cd').innerHTML=h;
 }
@@ -633,7 +635,7 @@ loadSet();
 sel();startEngine();reset();
 
 $('tabSt').onclick=()=>setTab('st');
-$('tabCd').onclick=()=>setTab('cd');
+$('tabCd').onclick=()=>{setTab('cd');if(!cands&&!$('cand').disabled)$('cand').click();};
 $('optsBtn').onclick=()=>$('sheet').classList.add('open');
 $('sheetClose').onclick=()=>$('sheet').classList.remove('open');
 $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.remove('open');};
