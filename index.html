@@ -50,6 +50,18 @@ button:disabled{opacity:.35}
 #sheetBox h2{font-size:16px;margin:0 0 10px;font-weight:600}
 .opt{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;font-size:14px;color:#ccc}
 .opt button,.opt select{min-width:150px}
+#coach{position:fixed;left:0;right:0;bottom:0;z-index:8;display:none;flex-direction:column;height:min(46vh,380px);max-width:560px;margin:0 auto;background:#191919;border-top:1px solid #3a3a3a;border-radius:16px 16px 0 0;padding:8px 10px calc(8px + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(0,0,0,.5)}
+#coach.open{display:flex}
+#chead{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:6px}#chead b{flex:1}
+#cx{min-height:30px;height:30px;width:38px;padding:0}
+#cmsgs{flex:1;overflow-y:auto;font-size:14.5px;line-height:1.55;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.cm{margin:0 0 8px;padding:8px 10px;border-radius:10px;white-space:pre-wrap}
+.cm.u{background:#2f4a2f;margin-left:36px}.cm.c{background:#262626;margin-right:16px}
+#cchips{display:flex;gap:6px;overflow-x:auto;margin:6px 0;scrollbar-width:none}
+#cchips button{min-height:32px;font-size:12.5px;white-space:nowrap;border-radius:16px;padding:0 12px;flex:none}
+#cform{display:flex;gap:6px}
+#cin{flex:1;min-width:0;font-size:16px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:10px;padding:0 10px;min-height:42px}
+#csend{min-width:64px}
 #help{font-size:13px;color:#999;line-height:1.7;margin-top:6px}
 #help summary{font-size:14px;color:#ccc;padding:8px 0}
 #help p{margin:6px 0}
@@ -67,10 +79,16 @@ button:disabled{opacity:.35}
 </div>
 <button id="cand" style="display:none"></button>
 <div id="panel">
- <div id="tabs"><button id="tabSt" class="on">판정</button><button id="tabCd">후보</button><div id="lg"></div></div>
+ <div id="tabs"><button id="tabSt" class="on">판정</button><button id="tabCd">후보</button><button id="tabCo" style="display:none">코치</button><div id="lg"></div></div>
  <div id="st">준비 중…</div>
  <div id="cd"></div>
 </div>
+</div>
+<div id="coach">
+ <div id="chead"><b>오목 코치</b><button id="cx">✕</button></div>
+ <div id="cmsgs"></div>
+ <div id="cchips"><button data-q="방금 내가 둔 수가 어때? 왜 그런 판정이야?">방금 수 평가</button><button data-q="지금 국면에서 최선 수가 뭐고 왜 그래?">최선 수는?</button><button data-q="이 국면에서 상대가 책 밖으로 나가면 어떻게 대응해야 해?">변칙 대응</button></div>
+ <div id="cform"><input id="cin" placeholder="내 생각을 말해 보세요" autocomplete="off"><button id="csend" class="on">보내기</button></div>
 </div>
 <div id="sheet"><div id="sheetBox">
  <h2>설정</h2>
@@ -640,4 +658,61 @@ $('tabCd').onclick=()=>{setTab('cd');if(!cands&&!$('cand').disabled)$('cand').cl
 $('optsBtn').onclick=()=>$('sheet').classList.add('open');
 $('sheetClose').onclick=()=>$('sheet').classList.remove('open');
 $('sheet').onclick=e=>{if(e.target===$('sheet'))$('sheet').classList.remove('open');};
+
+// ---- coach: Claude 안에서 열릴 때만 켜짐 (sample 기능)
+let sampleFn=null,chat=[],coachBusy=false;
+const plain=h=>String(h||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+const posTxt=a=>a.map((m,i)=>(i+1)+'.'+(i%2===0?'흑':'백')+m).join(' ');
+function evTxt(R,stmB){
+  if(!R)return null;const t=toBlack(R.ev,stmB);
+  return {평가:posEval(R.ev,stmB),흑기준점수:t.mate!==null?(t.mate>0?'흑 필승 '+t.mate+'수 이내':'백 필승 '+(-t.mate)+'수 이내'):t.cp,엔진최선:R.best,예상진행:(R.pv||[]).slice(0,10).join(' '),깊이:R.depth};
+}
+async function coachData(){
+  const stmB=moves.length%2===0,d={주형:op,수순:posTxt(moves),다음차례:stmB?'흑':'백'};
+  const bc=bookCands().map(x=>x[0]);d.책에_있는_다음수=bc.length?bc.join(', '):'없음(책 밖 국면)';
+  let cur=(fb&&fb.R&&fb.baseMoves&&fb.baseMoves.length===moves.length)?fb.R:null;
+  if(!cur&&ready&&!over){try{cur=await analyze(moves.slice(),Math.min(parseInt($('tl').value),8000));}catch(e){}}
+  d.현재국면_엔진=evTxt(cur,stmB)||'분석 없음';
+  if(fb&&fb.mv&&fb.baseMoves){
+    const n=fb.baseMoves.length,moverB=(n-1)%2===0;
+    d.직전수={번호:n,둔사람:moverB?'흑':'백',수:fb.mv,앱판정:fb.label||'채점 꺼짐',앱설명:plain(fb.reason),둔수_이전국면_엔진:evTxt(fb.PRE,moverB)||'분석 없음'};
+  }
+  return d;
+}
+const COACH_RULE='너는 렌주룰 오목 무적수 코치다. 사용자(대표님)는 흑 필승 주형(무적수)을 공부하며 앱에서 수를 둔다. 한국어 존댓말로 3~5문장 안에 답하라. 규칙: (1) 좌표는 열 A~O, 행 1~15(아래가 1)이고 수순은 좌표로 말한다. (2) 근거는 [엔진 데이터]뿐이다. 데이터에 없는 수순이나 필승 여부는 단정하지 말고 "엔진 자료로는 확인되지 않았다"고 말한다. (3) 흑기준점수는 +면 흑 유리, -면 백 유리이고, 필승은 데이터에 필승 표시가 있을 때만 말한다. (4) 사용자가 자기 생각을 말하면 맞장구치지 말고, 데이터로 맞는 부분과 틀린 부분을 나누어 말한다. (5) 가장 마지막 [엔진 데이터]가 현재 국면이고 앞선 것은 지난 질문 때의 것이다. 인사나 서두 없이 바로 답한다.';
+function addMsg(k,t){const e=document.createElement('div');e.className='cm '+k;e.textContent=t;$('cmsgs').appendChild(e);$('cmsgs').scrollTop=1e9;return e;}
+async function coachAsk(q){
+  q=String(q||'').trim();if(!sampleFn||coachBusy||!q)return;
+  coachBusy=true;$('csend').disabled=true;addMsg('u',q);const el=addMsg('c','엔진 분석 중…');
+  let pushed=false;
+  try{
+    const d=await coachData();
+    chat.push({role:'user',content:'[엔진 데이터]\n'+JSON.stringify(d)+'\n\n[질문]\n'+q});pushed=true;
+    let h=chat.slice(-7);if(h[0].role!=='user')h=h.slice(1);
+    const msgs=h.map(x=>({role:x.role,content:x.content}));
+    msgs[0]={role:'user',content:COACH_RULE+'\n\n'+msgs[0].content};
+    el.textContent='코치가 보는 중…';
+    const res=await sampleFn(msgs,{modelTier:'quick',cache:false,onText:o=>{el.textContent=o.text;$('cmsgs').scrollTop=1e9;}});
+    el.textContent=res.text;chat.push({role:'assistant',content:res.text});
+  }catch(e){
+    if(pushed)chat.pop();
+    const c=e&&e.code;
+    el.textContent=c==='not_granted'?'코치 사용이 허용되지 않았습니다.':c==='rate_limited'?'요청이 많습니다. 잠시 뒤에 다시 보내 주세요.':'코치 응답에 실패했습니다. '+(e&&e.message?e.message:'');
+    if(c==='not_granted')$('tabCo').style.display='none';
+  }
+  coachBusy=false;$('csend').disabled=false;
+}
+async function initCoach(){
+  if(!window.claude||!window.claude.use)return;
+  try{sampleFn=await window.claude.use('sample');}catch(e){sampleFn=null;}
+  if(!sampleFn)return;
+  $('tabCo').style.display='';
+}
+$('tabCo').onclick=()=>{const c=$('coach');c.classList.toggle('open');if(c.classList.contains('open')&&!$('cmsgs').children.length)addMsg('c','무엇이든 물어보세요. 예: "방금 수가 왜 약해?", "나는 J7이 버틴다고 생각했어"');};
+$('cx').onclick=()=>$('coach').classList.remove('open');
+$('csend').onclick=()=>{const v=$('cin').value;$('cin').value='';coachAsk(v);};
+$('cin').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();$('csend').click();}});
+$('cchips').addEventListener('click',e=>{const b=e.target.closest('button');if(b)coachAsk(b.dataset.q);});
+if(window.visualViewport){const vv=window.visualViewport,fit=()=>{const c=$('coach');c.style.bottom=Math.max(0,innerHeight-vv.height-vv.offsetTop)+'px';c.style.height=Math.min(380,vv.height*0.5)+'px';};vv.addEventListener('resize',fit);vv.addEventListener('scroll',fit);}
+initCoach();
 </script></body></html>
